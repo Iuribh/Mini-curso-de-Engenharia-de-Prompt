@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKR Tracker - Engenharia de Prompt</title>
+    <style>
+        /* CSS Integrado para Estilo Limpo e Profissional */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            color: #007BFF;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        
+        h3 {
+            color: #555;
+            border-bottom: 1px dashed #e9ecef;
+            padding-bottom: 5px;
+            margin-top: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        textarea, input[type="text"] {
+            width: 98%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            resize: vertical;
+            min-height: 50px; /* Menor para as perguntas */
+            box-sizing: border-box;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        textarea#kr-input {
+            min-height: 80px;
+            font-size: 16px;
+        }
+
+
+        button {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #218838;
+        }
+
+        #lista-krs {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .kr-card {
+            background-color: #e9f0f4;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 5px solid #007BFF;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            word-wrap: break-word;
+        }
+
+        .kr-card p {
+            margin: 5px 0 10px 0;
+            font-size: 14px;
+        }
+        
+        .kr-card strong {
+            display: block;
+            margin-bottom: 5px;
+            color: #007BFF;
+        }
+        
+        .kr-card .kr-text {
+            font-size: 16px;
+            font-weight: bold;
+            color: #007BFF;
+            margin: 10px 0;
+            background-color: #d8eaff;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        
+        .kr-card .kpi-detail {
+            font-size: 13px;
+            border-top: 1px dashed #ccc;
+            padding-top: 5px;
+            margin-top: 5px;
+        }
+
+        /* Estilos para a Avaliação Final */
+        #avaliacao-final-container {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #fff3cd; /* Amarelo claro para destaque */
+            border: 1px solid #ffeeba;
+            border-radius: 8px;
+        }
+        
+        #kr-submetido {
+            font-style: italic;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #fff;
+            border: 1px dashed #ccc;
+            border-radius: 5px;
+        }
+
+        .btn-avaliacao {
+            margin-right: 10px;
+            margin-top: 10px;
+            padding: 8px 12px;
+            font-size: 14px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .btn-green { background-color: #28a745; }
+        .btn-yellow { background-color: #ffc107; color: #333; }
+        .btn-red { background-color: #dc3545; }
+        
+        .btn-green:hover { background-color: #218838; }
+        .btn-yellow:hover { background-color: #e0a800; }
+        .btn-red:hover { background-color: #c82333; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .badge-green { background-color: #d4edda; color: #155724; }
+        .badge-yellow { background-color: #fff3cd; color: #856404; }
+        .badge-red { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="secao-aluno">
+        <h2>1. Defina Seu Resultado-Chave (KR)</h2>
+        <p>Para um KR eficaz, responda as perguntas abaixo, que definem o sucesso de sua meta.</p>
+        
+        <h3>Passo 1: Fundamentos do KR (KPI)</h3>
+        
+        <label for="kpi-resultado">Qual é o resultado desejado no final do curso e por que é importante?</label>
+        <textarea id="kpi-resultado" placeholder="Ex: Dominar a criação de prompts para gerar resumos de livros, pois isso economizará 30 minutos do meu tempo de estudo diário."></textarea>
+
+        <label for="kpi-como">Como você vai conseguir isso (qual estratégia de prompt você usará)?</label>
+        <textarea id="kpi-como" placeholder="Ex: Aplicando a estrutura de 4 Pilares (Contexto, Persona, Tarefa, Formato) na plataforma Gemini."></textarea>
+        
+        <label for="kpi-frequencia">Qual será a frequência de reavaliação da meta e progresso?</label>
+        <input type="text" id="kpi-frequencia" placeholder="Ex: A reavaliação será feita ao final de cada módulo do curso.">
+        
+        <h3>Passo 2: Defina a Métrica (O KR)</h3>
+        
+        <label for="kr-input">Como eu meço o sucesso? (O seu KR Mensurável)</label>
+        <textarea id="kr-input" placeholder="Ex: Criar um prompt de 4 pilares para gerar 5 flashcards sobre o meu tema de estudo usando o NotebookLM ou ChatGPT."></textarea>
+        
+        <button onclick="salvarKR()">Salvar Meu KR e Fundamentos</button>
+        <p id="mensagem-kr" style="margin-top: 15px; color: #007BFF; font-weight: bold;"></p>
+    </div>
+
+    <div class="container" id="secao-professor">
+        <h2>2. Acompanhamento dos KRs (Visualização do Professor)</h2>
+        <p>Abaixo estão os Resultados-Chave e seus fundamentos submetidos pelos participantes.</p>
+        <button onclick="exibirKRs()">Atualizar KRs</button>
+        <div id="lista-krs">
+            <p style="grid-column: 1 / -1;">Clique em 'Atualizar KRs' para carregar as metas dos participantes.</p>
+        </div>
+    </div>
+    
+    <div class="container" id="avaliacao-final-container" style="display: none;">
+        <h2>3. Avaliação Final do Meu KR</h2>
+        <p>Ao final do minicurso, vote no status do seu KR:</p>
+        <strong>Seu KR Registrado:</strong>
+        <p id="kr-submetido">Nenhum KR encontrado.</p>
+        
+        <div id="opcoes-avaliacao" style="margin-top: 20px;">
+            <button class="btn-avaliacao btn-green" onclick="votarKR('Alcançado (Sim)')">✅ Alcançado (Sim)</button>
+            <button class="btn-avaliacao btn-yellow" onclick="votarKR('Alcançado (Parcialmente)')">🟡 Alcançado (Parcialmente)</button>
+            <button class="btn-avaliacao btn-red" onclick="votarKR('Não Alcançado')">❌ Não Alcançado</button>
+        </div>
+        <p id="mensagem-avaliacao" class="status-badge" style="display: none;"></p>
+    </div>
+
+    <script>
+        // JS Integrado - Lógica do Aplicativo
+        const KR_KEY = 'krs_minicurso_eng_prompt';
+        const USER_KR_KEY = 'kr_pessoal_usuario';
+
+        function getFormData() {
+            return {
+                krTexto: document.getElementById('kr-input').value.trim(),
+                kpiResultado: document.getElementById('kpi-resultado').value.trim(),
+                kpiComo: document.getElementById('kpi-como').value.trim(),
+                kpiFrequencia: document.getElementById('kpi-frequencia').value.trim(),
+            };
+        }
+
+        function salvarKR() {
+            const formData = getFormData();
+            const { krTexto, kpiResultado, kpiComo, kpiFrequencia } = formData;
+            const mensagem = document.getElementById('mensagem-kr');
+
+            if (krTexto === "" || kpiResultado === "" || kpiComo === "") {
+                mensagem.textContent = "Por favor, preencha todos os campos do Passo 1 e do KR (Passo 2).";
+                mensagem.style.color = '#dc3545';
+                return;
+            }
+
+            // 1. Salva o KR pessoal do usuário para uso na avaliação final
+            localStorage.setItem(USER_KR_KEY, krTexto);
+            
+            // 2. Adiciona o KR completo (KR + KPIs) à lista geral (para visualização do professor)
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            
+            // Remove o KR antigo do usuário (se houver) para evitar duplicatas e permitir edição.
+            krs = krs.filter(item => item.kr !== krTexto); 
+            
+            // Adiciona o novo KR
+            const novoKr = { 
+                id: Date.now(), 
+                kr: krTexto, 
+                resultado: kpiResultado,
+                como: kpiComo,
+                frequencia: kpiFrequencia,
+                data: new Date().toLocaleString('pt-BR'),
+                status: 'Pendente'
+            };
+            krs.push(novoKr);
+            
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+
+            mensagem.textContent = "Seu Resultado-Chave e seus fundamentos foram salvos! Agora vamos ao conteúdo.";
+            mensagem.style.color = '#28a745';
+            
+            // Atualiza a visualização da avaliação para o aluno
+            carregarAvaliacaoInicial();
+        }
+
+        function exibirKRs() {
+            const listaDiv = document.getElementById('lista-krs');
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            listaDiv.innerHTML = '';
+
+            if (krs.length === 0) {
+                listaDiv.innerHTML = '<p style="grid-column: 1 / -1;">Nenhum KR submetido ainda.</p>';
+                return;
+            }
+
+            krs.forEach(item => {
+                const krCard = document.createElement('div');
+                krCard.className = 'kr-card';
+                
+                let statusClass = '';
+                let statusTexto = item.status;
+                
+                if (item.status.includes('Sim')) {
+                    statusClass = 'badge-green';
+                } else if (item.status.includes('Parcialmente')) {
+                    statusClass = 'badge-yellow';
+                } else if (item.status.includes('Não')) {
+                    statusClass = 'badge-red';
+                } else {
+                    statusClass = 'status-badge'; // Pendente
+                    statusTexto = 'Pendente';
+                }
+
+                krCard.innerHTML = `
+                    <strong>KR (A Métrica de Sucesso):</strong>
+                    <p class="kr-text">${item.kr}</p>
+                    
+                    <div class="kpi-detail">
+                        <strong>Resultado Desejado (O porquê):</strong>
+                        <p>${item.resultado}</p>
+                    </div>
+                    
+                    <div class="kpi-detail">
+                        <strong>Estratégia (O como):</strong>
+                        <p>${item.como}</p>
+                    </div>
+                    
+                    <div class="kpi-detail">
+                        <strong>Frequência de Reavaliação:</strong>
+                        <p>${item.frequencia || 'Não especificada'}</p>
+                    </div>
+
+                    <p style="margin-top: 15px;">Submetido em: ${item.data}</p>
+                    <p>Status: <span class="status-badge ${statusClass}">${statusTexto}</span></p>
+                `;
+                listaDiv.appendChild(krCard);
+            });
+        }
+
+        function votarKR(status) {
+            const userKr = localStorage.getItem(USER_KR_KEY);
+            const mensagemAvaliacao = document.getElementById('mensagem-avaliacao');
+            
+            if (!userKr) {
+                mensagemAvaliacao.textContent = "Erro: KR não encontrado para avaliação.";
+                mensagemAvaliacao.className = 'status-badge badge-red';
+                mensagemAvaliacao.style.display = 'inline-block';
+                return;
+            }
+
+            // 1. Atualiza o status na lista geral de KRs (para o professor)
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            // Encontra o item pelo KR do usuário, garantindo que a votação se aplique
+            const index = krs.findIndex(item => item.kr === userKr);
+            
+            if (index > -1) {
+                krs[index].status = status;
+                localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            }
+            
+            // 2. Atualiza a mensagem de confirmação para o aluno
+            mensagemAvaliacao.textContent = `Voto registrado: ${status}`;
+            mensagemAvaliacao.className = 'status-badge ' + (status.includes('Sim') ? 'badge-green' : status.includes('Parcialmente') ? 'badge-yellow' : 'badge-red');
+            mensagemAvaliacao.style.display = 'inline-block';
+        }
+
+        function carregarAvaliacaoInicial() {
+            const userKr = localStorage.getItem(USER_KR_KEY);
+            const avaliacaoContainer = document.getElementById('avaliacao-final-container');
+            const krSubmetido = document.getElementById('kr-submetido');
+            
+            // Pré-preenche os campos do formulário se o KR principal já tiver sido salvo
+            if (userKr) {
+                const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+                const krData = krs.find(item => item.kr === userKr);
+
+                if (krData) {
+                    document.getElementById('kr-input').value = krData.kr;
+                    document.getElementById('kpi-resultado').value = krData.resultado;
+                    document.getElementById('kpi-como').value = krData.como;
+                    document.getElementById('kpi-frequencia').value = krData.frequencia;
+                }
+                
+                // Se houver KR salvo, exibe-o na seção de avaliação
+                krSubmetido.textContent = userKr;
+                avaliacaoContainer.style.display = 'block';
+            } else {
+                // Se não houver, esconde a seção de avaliação até a submissão
+                avaliacaoContainer.style.display = 'none';
+            }
+        }
+
+        // Inicializa o estado ao carregar a página
+        window.onload = carregarAvaliacaoInicial;
+    </script>
+
+</body>
+</html>
