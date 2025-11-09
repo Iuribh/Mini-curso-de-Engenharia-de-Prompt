@@ -1,0 +1,2669 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKR Tracker</title>
+    <!-- Biblioteca PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+<!--
+OKR Tracker - Guia Rápido
+
+FUNCIONALIDADES:
+1. Gestão de OKRs
+   - Criação de OKRs com título, resultado desejado, estratégia e prazo
+   - Suporte a sub-OKRs (pequenas metas)
+   - Edição inline rápida de campos (clique no ícone ✏️ ao lado)
+   - Categorização (PESSOAL, ACADÊMICO, etc.)
+
+2. Acompanhamento
+   - Visualização em cards com status e urgência
+   - Indicador visual de prazo (vermelho = urgente)
+   - Edição rápida de campos nos cards
+   - Controle de status (Não Iniciado → Em Progresso → Concluído)
+   - Undo/Desfazer para edições e remoções
+
+3. Visual & UX
+   - Tema claro/escuro
+   - Notificações toast animadas
+   - Mensagens motivacionais
+   - Confirmações antes de ações importantes
+
+DADOS:
+- Armazenamento: LocalStorage
+- Chaves: 
+  - krs_minicurso_eng_prompt (OKRs)
+  - kr_pessoal_usuario (OKR pessoal)
+  - okr_categorias (categorias)
+  - okr_theme_preference (tema)
+
+FUNÇÕES PRINCIPAIS:
+- exibirKRs(): renderiza lista de OKRs
+- salvarKR(): salva novo OKR
+- editarOKR(): edição completa
+- enableInlineFieldEdit(): edição rápida
+- calcularUrgencia(): indica proximidade do prazo
+-->
+<html lang="pt-BR"
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKR Tracker - Engenharia de Prompt</title>
+    <style>
+        /* Reset básico */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        :root {
+            /* Cores do tema claro */
+            --bg-color: #f4f7f9;
+            --container-bg: #fff;
+            --text-color: #333;
+            --text-muted: #666;
+            --primary-color: #007bff;
+            --success-color: #28a745;
+            --border-color: #e9ecef;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] {
+            /* Cores do tema escuro */
+            --bg-color: #1a1a1a;
+            --container-bg: #2d2d2d;
+            --text-color: #e4e4e4;
+            --text-muted: #aaa;
+            --primary-color: #4da3ff;
+            --success-color: #2fb344;
+            --border-color: #404040;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Estilos gerais */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            background-color: var(--container-bg);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px var(--shadow-color);
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+
+        /* Tema Switch */
+        .theme-switch {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background-color: var(--container-bg);
+            padding: 10px;
+            border-radius: 20px;
+            box-shadow: 0 2px 5px var(--shadow-color);
+        }
+
+        .theme-switch button {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+            color: var(--text-color);
+        }
+
+        /* Mensagens motivacionais */
+        .motivational-message {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: var(--success-color);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px var(--shadow-color);
+            animation: slideIn 0.5s ease-out;
+            z-index: 1000;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Tipografia */
+        h2 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        h3 {
+            color: var(--text-muted);
+            margin: 25px 0 15px;
+            padding-bottom: 5px;
+            border-bottom: 1px dashed var(--border-color);
+        }
+
+        /* Formulários */
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-color);
+        }
+
+        input[type="text"],
+        input[type="date"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        select {
+            background-color: #fff;
+        }
+
+        /* Botões */
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #218838;
+        }
+
+        /* Lista de Categorias */
+        #lista-categorias {
+            margin: 15px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        #lista-categorias span {
+            background-color: #e7f1ff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        /* Estilos do Timer Pomodoro */
+        .timer-settings {
+            margin: 15px 0;
+            padding: 15px;
+            background: var(--container-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .setting-group {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .setting-group label {
+            margin-bottom: 0;
+            flex: 1;
+        }
+
+        .setting-group input {
+            width: 80px;
+            margin-left: 10px;
+            margin-bottom: 0;
+            text-align: center;
+        }
+
+        .settings-save {
+            width: 100%;
+            margin-top: 10px;
+            background-color: var(--primary-color);
+        }
+
+        /* Estilos do Sistema de Conquistas */
+        .achievement-panel {
+            position: fixed;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 300px;
+            background-color: var(--container-bg);
+            box-shadow: -2px 0 10px var(--shadow-color);
+            padding: 20px;
+            z-index: 1100;
+            animation: slideInRight 0.3s ease-out;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+
+        .achievement-hint {
+            font-size: 0.9em;
+            color: var(--text-muted);
+            margin-bottom: 15px;
+            padding: 8px;
+            background-color: rgba(var(--primary-color-rgb), 0.1);
+            border-radius: 4px;
+        }
+
+        .achievement-inputs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .achievement-inputs input {
+            flex: 1;
+        }
+
+        .emoji-picker select {
+            padding: 8px;
+            font-size: 16px;
+        }
+
+        .achievement-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-mereco, .btn-nao-mereco {
+            flex: 1;
+            padding: 12px;
+        }
+
+        .btn-mereco {
+            background-color: var(--success-color);
+        }
+
+        .btn-nao-mereco {
+            background-color: var(--text-muted);
+        }
+
+        /* Cards de OKR */
+        #lista-krs {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .kr-card {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .kr-card .kr-text {
+            font-size: 16px;
+            font-weight: 600;
+            color: #007bff;
+            margin: 10px 0;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .kr-card .kpi-detail {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #e9ecef;
+        }
+
+        /* Status e Badges */
+        .status-badge {
+            display: inline-block;
+        }
+
+        /* Indicadores de urgência */
+        .urgency-low {
+            background-color: rgba(255, 0, 0, 0.1);
+        }
+
+        .urgency-medium {
+            background-color: rgba(255, 0, 0, 0.2);
+        }
+
+        .urgency-high {
+            background-color: rgba(255, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] .urgency-low {
+            background-color: rgba(255, 0, 0, 0.15);
+        }
+
+        [data-theme="dark"] .urgency-medium {
+            background-color: rgba(255, 0, 0, 0.25);
+        }
+
+        [data-theme="dark"] .urgency-high {
+            background-color: rgba(255, 0, 0, 0.35);
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .badge-green {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .badge-yellow {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-red {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        /* Controle Rápido */
+        #painel-controle-rapido {
+            margin-top: 20px;
+        }
+
+        #seletor-okr-controle {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        /* Mensagens */
+        .mensagem {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .mensagem-sucesso {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .mensagem-erro {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        /* Progress Bar e Status */
+        .progress-wrapper {
+            background: var(--border-color);
+            border-radius: 8px;
+            height: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--success-color);
+            transition: width 0.3s ease;
+        }
+
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-nao-iniciado { background: var(--border-color); color: var(--text-muted); }
+        .status-em-progresso { background: #fff3cd; color: #856404; }
+        .status-concluido-parcialmente { background: #cce5ff; color: #004085; }
+        .status-concluido { background: #d4edda; color: #155724; }
+        .status-cancelado { background: #f8d7da; color: #721c24; }
+
+        /* Filtros e Ordenação */
+        .filters-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-select {
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--container-bg);
+            color: var(--text-color);
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 8px 12px;
+            padding-left: 32px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--container-bg);
+            color: var(--text-color);
+        }
+
+        .search-box svg {
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        /* Categorias */
+        .category-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .category-chip button {
+            background: transparent;
+            border: none;
+            padding: 0;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: white;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .category-chip button:hover {
+            opacity: 1;
+        }
+
+        /* Barra de Ferramentas */
+        .toolbar {
+            position: fixed;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: var(--container-bg);
+            padding: 10px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px var(--shadow-color);
+            z-index: 1000;
+        }
+
+        .tool-button {
+            background: transparent;
+            border: none;
+            color: var(--text-color);
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tool-button:hover {
+            background: var(--border-color);
+            color: var(--primary-color);
+        }
+
+        .badges-counter {
+            text-align: center;
+            padding: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        /* Timer Pomodoro */
+        .pomodoro-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1001;
+        }
+
+        .pomodoro-card {
+            background: var(--container-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px var(--shadow-color);
+            min-width: 300px;
+            position: relative;
+        }
+
+        .timer-display {
+            font-size: 48px;
+            font-weight: 700;
+            text-align: center;
+            margin: 20px 0;
+            font-family: monospace;
+            color: var(--primary-color);
+        }
+
+        .timer-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .timer-controls button {
+            flex: 1;
+            padding: 8px;
+        }
+
+        .timer-mode {
+            display: flex;
+            gap: 8px;
+        }
+
+        .timer-mode button {
+            flex: 1;
+            background: var(--border-color);
+            color: var(--text-color);
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .timer-mode button.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .close-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        /* Conquistas */
+        .achievements-container {
+            max-width: 600px !important;
+        }
+
+        .achievements-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .achievement-card {
+            background: var(--border-color);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .achievement-card.locked {
+            opacity: 0.5;
+        }
+
+        .achievement-card .emoji {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .achievement-card .title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .achievement-card .description {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .achievement-unlocked {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--success-color);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            animation: achievementIn 0.5s ease-out;
+            z-index: 2000;
+        }
+
+        @keyframes achievementIn {
+            from { transform: translate(-50%, -100%); }
+            to { transform: translate(-50%, 0); }
+        }
+
+        /* Responsividade */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            #lista-krs {
+                grid-template-columns: 1fr;
+            }
+
+            .filters-bar {
+                flex-direction: column;
+            }
+
+            .filter-group {
+                width: 100%;
+            }
+
+            .search-box {
+                width: 100%;
+            }
+
+            .toolbar {
+                left: 0;
+                bottom: 20px;
+                top: auto;
+                transform: none;
+                flex-direction: row;
+                width: 100%;
+                justify-content: center;
+                border-radius: 0;
+            }
+
+            .pomodoro-container {
+                width: 100%;
+                right: 0;
+                bottom: 0;
+            }
+
+            .pomodoro-card {
+                border-radius: 12px 12px 0 0;
+                min-width: 0;
+            }
+        }
+        /* Toasts (empilháveis) */
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 2000;
+            transform: translateZ(0);
+            perspective: 800px;
+        }
+
+        .toast {
+            min-width: 220px;
+            max-width: 360px;
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 8px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: toastIn 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+            will-change: transform, opacity;
+            transform-origin: top;
+        }
+
+        .toast.info { background: #333; }
+        .toast.success { background: var(--success-color); }
+        .toast.error { background: #dc3545; }
+
+        .toast .icon {
+            font-size: 18px;
+            animation: bounceIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+        }
+        .toast .message {
+            flex: 1;
+            font-weight:600;
+            opacity: 0;
+            animation: fadeIn 0.3s ease forwards 0.15s;
+        }
+        .toast .actions {
+            opacity: 0;
+            animation: fadeIn 0.3s ease forwards 0.25s;
+        }
+        .toast.removing {
+            animation: toastOut 0.4s cubic-bezier(0.06, 0.71, 0.55, 1) forwards;
+        }
+
+        @keyframes toastIn {
+            from { transform: translateY(-120%) scale(0.9) rotateX(-40deg); opacity: 0; }
+            to { transform: translateY(0) scale(1) rotateX(0); opacity: 1; }
+        }
+        @keyframes toastOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(120%); opacity: 0; }
+        }
+        @keyframes bounceIn {
+            from { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.1); }
+            to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-8px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        /* Modal de confirmação */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+        }
+
+        .modal-backdrop.active { display: flex; }
+
+        .modal {
+            background: var(--container-bg);
+            color: var(--text-color);
+            padding: 18px;
+            border-radius: 8px;
+            max-width: 520px;
+            width: 100%;
+            box-shadow: 0 6px 30px rgba(0,0,0,0.25);
+        }
+
+        .modal .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+    </style>
+</head>
+<body>
+    <div class="theme-switch">
+        <button onclick="toggleTheme()" id="theme-toggle">🌞</button>
+    </div>
+
+    <!-- Barra de ferramentas flutuante -->
+    <div class="toolbar">
+        <button onclick="togglePomodoro()" class="tool-button" title="Timer Pomodoro">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12v4m0 0v4m0-4h4m-4 0H7" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </button>
+        <button onclick="sincronizarCalendar()" class="tool-button" title="Sincronizar com Google Calendar">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                <path d="M6 2v2m8-2v2M3 6h14m-14 2v8a2 2 0 002 2h10a2 2 0 002-2V8H3z" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </button>
+        <button onclick="compartilharOKR()" class="tool-button" title="Compartilhar OKR">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                <path d="M15 7a3 3 0 11-2.977-3h.007L7 7m0 0l5-3m-5 3v6m0 0l5 3m-5-3H4" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Timer Pomodoro -->
+    <div id="pomodoro-container" class="pomodoro-container" style="display:none;">
+        <div class="pomodoro-card">
+            <h3>Timer Pomodoro</h3>
+            <div class="timer-settings">
+                <div class="setting-group">
+                    <label>Minutos de Trabalho:</label>
+                    <input type="number" id="work-minutes" min="1" max="60" value="25">
+                </div>
+                <div class="setting-group">
+                    <label>Minutos de Pausa:</label>
+                    <input type="number" id="break-minutes" min="1" max="30" value="5">
+                </div>
+                <button onclick="updatePomodoroSettings()" class="settings-save">Salvar</button>
+            </div>
+            <div class="timer-display">
+                <span id="timer-minutes">25</span>:<span id="timer-seconds">00</span>
+            </div>
+            <div class="timer-controls">
+                <button onclick="startPomodoro()" id="pomodoro-start">Iniciar</button>
+                <button onclick="pausePomodoro()" id="pomodoro-pause" disabled>Pausar</button>
+                <button onclick="resetPomodoro()">Resetar</button>
+            </div>
+            <div class="timer-mode">
+                <button onclick="setTimerMode('work')" class="active">Trabalho</button>
+                <button onclick="setTimerMode('break')">Pausa</button>
+            </div>
+            <button onclick="togglePomodoro()" class="close-button">×</button>
+        </div>
+    </div>
+    
+    <div class="motivational-message" id="motivational-message"></div>
+
+    <!-- Modal de Conquistas -->
+    <div id="achievements-modal" class="modal-backdrop">
+        <div class="modal achievements-container">
+            <h2>Suas Conquistas 🏆</h2>
+            <div id="achievements-list" class="achievements-grid"></div>
+            <button onclick="document.getElementById('achievements-modal').classList.remove('active')">Fechar</button>
+        </div>
+    </div>
+    
+    <!-- Modal de confirmação reutilizável -->
+    <div class="modal-backdrop" id="confirm-modal">
+        <div class="modal" role="dialog" aria-modal="true">
+            <div id="confirm-modal-message">Tem certeza?</div>
+            <div class="actions">
+                <button id="confirm-cancel" style="background:#6c757d;">Cancelar</button>
+                <button id="confirm-ok" style="background:#dc3545;">Confirmar</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container" id="secao-aluno">
+        <h2>1. Defina seus objetivos ou metas chave (OKRs)</h2>
+        <p>Para um OKR eficaz, responda as perguntas abaixo que definem o sucesso de sua meta.</p>
+
+        <h3>Configurar Categorias de OKRs</h3>
+        <p>Crie categorias e aloque OKRs a elas (ex: PESSOAL, ACADÊMICO, PROFISSIONAL)</p>
+        <div>
+            <label for="nova-categoria">Nova Categoria</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="nova-categoria" placeholder="Digite o nome da categoria" style="flex: 1;">
+                <button onclick="adicionarCategoria()">Adicionar Categoria</button>
+            </div>
+        </div>
+        <div id="lista-categorias">
+            <!-- Categorias serão inseridas aqui -->
+        </div>
+
+        <h3>Passo 1: Fundamentos das OKRs (KPI)</h3>
+        <div>
+            <label for="kpi-resultado">Qual é o resultado desejado no final do curso e por que é importante?</label>
+            <textarea id="kpi-resultado" placeholder="Ex: Dominar a criação de prompts para gerar resumos de livros, pois isso economizará 30 minutos do meu tempo de estudo diário."></textarea>
+        </div>
+
+        <div>
+            <label for="kpi-como">Como você vai conseguir isso (qual estratégia de prompt você usará)?</label>
+            <textarea id="kpi-como" placeholder="Ex: Aplicando a estrutura de 4 Pilares (Contexto, Persona, Tarefa, Formato) na plataforma Gemini."></textarea>
+        </div>
+
+        <div>
+            <label for="kpi-frequencia">Qual será a frequência de reavaliação em dias?</label>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="number" id="kpi-frequencia" min="1" max="365" style="flex: 1;" placeholder="Ex: 7">
+                <span style="color: var(--text-muted);">dias</span>
+            </div>
+            <small style="color: var(--text-muted); display: block; margin-top: 5px;">
+                Digite um número entre 1 e 365 dias para definir o intervalo de reavaliação.
+            </small>
+        </div>
+
+        <h3>Passo 2: Defina a Métrica (OKRs)</h3>
+        <div>
+            <label for="kr-input">Como eu meço o sucesso? (O seu OKR Mensurável)</label>
+            <textarea id="kr-input" placeholder="Ex: Criar um prompt de 4 pilares para gerar 5 flashcards sobre o meu tema de estudo usando o NotebookLM ou ChatGPT."></textarea>
+        </div>
+
+        <div>
+            <label for="categoria-select">Categoria</label>
+            <select id="categoria-select"></select>
+        </div>
+
+        <div>
+            <label for="kr-deadline">Prazo limite</label>
+            <input type="date" id="kr-deadline">
+        </div>
+
+        <h3>Sub-OKRs / Pequenas metas</h3>
+        <p>Adicione pequenas OKRs relacionadas ao objetivo principal.</p>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <input type="text" id="subokr-input" placeholder="Ex: Ler 1 capítulo por dia" style="flex: 1;">
+            <button onclick="adicionarSubOKR()">Adicionar Sub-OKR</button>
+        </div>
+        <ul id="lista-subokrs" style="list-style-position: inside;">
+            <!-- Sub-OKRs serão inseridas aqui -->
+        </ul>
+
+        <div style="margin-top: 20px;">
+            <button onclick="salvarKR()" style="margin-right: 10px;">Salvar Meu KR e Fundamentos</button>
+            <button onclick="limparDadosTeste()" style="background-color: #6c757d;">Limpar dados (teste)</button>
+        </div>
+        <p id="mensagem-kr" class="mensagem"></p>
+    </div>
+
+    <div class="container" id="secao-professor">
+        <h2>2. Acompanhamento das OKRs (Visualização do Professor)</h2>
+        <p>Abaixo estão os Resultados-Chave e seus fundamentos submetidos pelos participantes.</p>
+        
+        <div class="filters-bar">
+            <div class="search-box">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                    <path d="M9 17A8 8 0 109 1a8 8 0 000 16zM19 19l-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <input type="text" id="busca-okr" placeholder="Buscar OKRs..." oninput="filtrarOKRs()">
+            </div>
+            
+            <div class="filter-group">
+                <label>Categoria:</label>
+                <select id="filtro-categoria" class="filter-select" onchange="filtrarOKRs()">
+                    <option value="">Todas</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>Status:</label>
+                <select id="filtro-status" class="filter-select" onchange="filtrarOKRs()">
+                    <option value="">Todos</option>
+                    <option value="Não Iniciado">Não Iniciado</option>
+                    <option value="Em Progresso">Em Progresso</option>
+                    <option value="Concluído Parcialmente">Concluído Parcialmente</option>
+                    <option value="Concluído">Concluído</option>
+                    <option value="Cancelado">Cancelado</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>Ordenar por:</label>
+                <select id="ordem-okrs" class="filter-select" onchange="filtrarOKRs()">
+                    <option value="data-desc">Mais recentes</option>
+                    <option value="data-asc">Mais antigos</option>
+                    <option value="deadline-asc">Prazo mais próximo</option>
+                    <option value="deadline-desc">Prazo mais distante</option>
+                    <option value="progresso-desc">Maior progresso</option>
+                    <option value="progresso-asc">Menor progresso</option>
+                </select>
+            </div>
+        </div>
+
+        <button onclick="exibirKRs()" style="margin-bottom:15px;">Atualizar OKRs</button>
+        <div id="lista-krs">
+            <!-- KRs serão inseridas aqui -->
+        </div>
+    </div>
+
+    <div class="container" id="avaliacao-final-container" style="display: none;">
+        <h2>3. Avaliação e Reflexão</h2>
+        <p>Acompanhe seu progresso e registre suas reflexões sobre cada OKR.</p>
+        
+        <div style="margin: 20px 0;">
+            <label for="okr-selector">Selecione o OKR para avaliar:</label>
+            <select id="okr-selector" style="width: 100%; margin-bottom: 15px;" onchange="selecionarOKRParaAvaliacao(this.value)">
+                <option value="">Escolha um OKR...</option>
+            </select>
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <strong>OKR Selecionado:</strong>
+            <p id="kr-submetido" style="margin-top: 10px; padding: 10px; background: var(--border-color); border-radius: 4px;"></p>
+        </div>
+
+        <div style="margin: 20px 0;">
+            <strong>Status Atual:</strong>
+            <div id="opcoes-avaliacao" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn-avaliacao badge-green" onclick="votarKR('Concluído')">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" style="margin-right:4px;">
+                        <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" fill="currentColor"/>
+                    </svg>
+                    Concluído
+                </button>
+                <button class="btn-avaliacao badge-yellow" onclick="votarKR('Em Progresso')">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" style="margin-right:4px;">
+                        <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12v4m0 0v4m0-4h4m-4 0H7" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    Em Progresso
+                </button>
+                <button class="btn-avaliacao badge-yellow" onclick="votarKR('Concluído Parcialmente')">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" style="margin-right:4px;">
+                        <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-5h2m-2-4h2" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    Concluído Parcialmente
+                </button>
+                <button class="btn-avaliacao badge-red" onclick="votarKR('Cancelado')">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" style="margin-right:4px;">
+                        <path d="M6 6l8 8m-8 0l8-8" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    Cancelado
+                </button>
+            </div>
+        </div>
+
+        <div style="margin: 20px 0;">
+            <label for="competencias">Competências Desenvolvidas:</label>
+            <div style="margin-top: 8px;">
+                <div id="competencias-list" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+                    <!-- Competências serão inseridas aqui -->
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="nova-competencia" placeholder="Digite uma nova competência..." style="flex: 1;">
+                    <button onclick="adicionarCompetencia()" style="white-space: nowrap;">
+                        Adicionar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin: 20px 0;">
+            <label for="feedback">Reflexão e Aprendizados:</label>
+            <textarea id="feedback" rows="4" style="width: 100%; margin-top: 8px; resize: vertical;" 
+                placeholder="Registre suas reflexões sobre este OKR. O que funcionou bem? O que poderia ser melhorado? Quais foram os principais aprendizados?"></textarea>
+        </div>
+
+        <div style="margin: 20px 0;">
+            <label for="proximos-passos">Próximos Passos:</label>
+            <textarea id="proximos-passos" rows="3" style="width: 100%; margin-top: 8px; resize: vertical;"
+                placeholder="Quais são as próximas ações para continuar evoluindo neste objetivo?"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="salvarAvaliacao()" style="background: var(--success-color);">
+                💾 Salvar Avaliação
+            </button>
+        </div>
+        
+        <p id="mensagem-avaliacao" class="mensagem" style="display: none; margin-top: 15px;"></p>
+    </div>
+
+    <script>
+        // Constantes para localStorage
+        const KR_KEY = 'krs_minicurso_eng_prompt';
+        const USER_KR_KEY = 'kr_pessoal_usuario';
+        const CAT_KEY = 'okr_categorias';
+        const THEME_KEY = 'okr_theme_preference';
+
+        // Mensagens motivacionais
+        const mensagensMotivacionais = [
+            "Eu sabia que você conseguiria! 🌟",
+            "Incrível trabalho! Continue assim! 🚀",
+            "Você está arrasando! 💪",
+            "Seu esforço está valendo a pena! 🎯",
+            "Mais uma conquista para sua lista! ⭐",
+            "Você é capaz de ainda mais! 🌈",
+            "Sucesso é a soma de pequenos esforços! 🎉",
+            "Você está no caminho certo! 🛤️",
+            "Que orgulho do seu progresso! 🏆",
+            "Continue brilhando! ✨"
+        ];
+
+        // Função para alternar tema
+        function toggleTheme() {
+            const body = document.body;
+            const button = document.getElementById('theme-toggle');
+            const isDark = body.getAttribute('data-theme') === 'dark';
+            
+            body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+            button.textContent = isDark ? '🌞' : '🌙';
+            localStorage.setItem(THEME_KEY, isDark ? 'light' : 'dark');
+        }
+
+        // Função para mostrar mensagem motivacional
+        function mostrarMensagemMotivacional() {
+            const msg = mensagensMotivacionais[Math.floor(Math.random() * mensagensMotivacionais.length)];
+            const msgDiv = document.getElementById('motivational-message');
+            msgDiv.textContent = msg;
+            msgDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                msgDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Estado temporário para sub-OKRs
+        let subOKRsTemp = [];
+
+        // Funções para gerenciar datas e urgência
+        function calcularUrgencia(data, frequencia) {
+            if (!data) return '';
+            
+            const hoje = new Date();
+            const dataAlvo = new Date(data);
+            const diasRestantes = Math.ceil((dataAlvo - hoje) / (1000 * 60 * 60 * 24));
+            const freq = parseInt(frequencia) || 7; // Se não definido, assume 7 dias
+            
+            if (diasRestantes <= freq) return 'urgency-high';
+            if (diasRestantes <= freq * 2) return 'urgency-medium';
+            if (diasRestantes <= freq * 3) return 'urgency-low';
+            return '';
+        }
+
+        function formatarData(data) {
+            if (!data) return 'Não especificado';
+            const d = new Date(data);
+            return d.toLocaleDateString('pt-BR');
+        }
+
+        // Função para coletar dados do formulário
+        function getFormData() {
+            return {
+                krTexto: document.getElementById('kr-input').value.trim(),
+                kpiResultado: document.getElementById('kpi-resultado').value.trim(),
+                kpiComo: document.getElementById('kpi-como').value.trim(),
+                kpiFrequencia: document.getElementById('kpi-frequencia').value.trim(),
+                categoria: document.getElementById('categoria-select').value,
+                deadline: document.getElementById('kr-deadline').value,
+                subtasks: subOKRsTemp.slice()
+            };
+        }
+
+        // Pending edits (undo support)
+        const pendingEdits = {}; // id -> { previous: {...}, timeout }
+
+        // Função utilitária: mostra toast com tipo e ação opcional
+        function createToast(message, type = 'info', duration = 5000, actionsHtml = '') {
+            const containerId = 'toast-container';
+            let container = document.getElementById(containerId);
+            if (!container) {
+                container = document.createElement('div');
+                container.id = containerId;
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+
+            // Ícones SVG estilizados por tipo
+            const icons = {
+                success: `<svg class="icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                    <path d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4l3.3 3.3 7.3-7.3a1 1 0 011.4 0z" fill="currentColor"/>
+                </svg>`,
+                error: `<svg class="icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM10 6v4m0 2v2" stroke-width="2" stroke-linecap="round"/>
+                </svg>`,
+                info: `<svg class="icon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM10 9V7m0 4v4" stroke-width="2" stroke-linecap="round"/>
+                </svg>`
+            };
+
+            toast.innerHTML = `
+                <div class="icon">${icons[type] || icons.info}</div>
+                <div class="message">${message}</div>
+                <div class="actions">${actionsHtml}</div>
+            `;
+            container.appendChild(toast);
+
+            const remove = () => {
+                toast.classList.add('removing');
+                setTimeout(() => {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 400); // duração da animação de saída
+            };
+            
+            setTimeout(remove, duration);
+            return toast;
+        }
+
+        // Modal de confirmação que retorna uma Promise
+        function confirmModal(message) {
+            return new Promise(resolve => {
+                const modal = document.getElementById('confirm-modal');
+                const msg = document.getElementById('confirm-modal-message');
+                const btnOk = document.getElementById('confirm-ok');
+                const btnCancel = document.getElementById('confirm-cancel');
+                msg.textContent = message || 'Tem certeza?';
+                modal.classList.add('active');
+
+                function cleanup(result) {
+                    modal.classList.remove('active');
+                    btnOk.removeEventListener('click', onOk);
+                    btnCancel.removeEventListener('click', onCancel);
+                    resolve(result);
+                }
+
+                function onOk() { cleanup(true); }
+                function onCancel() { cleanup(false); }
+
+                btnOk.addEventListener('click', onOk);
+                btnCancel.addEventListener('click', onCancel);
+            });
+        }
+
+        // Funções de cálculo de progresso
+        function calcularProgresso(item) {
+            if (!item) return 0;
+            
+            // Progresso baseado em subtasks
+            let subtaskProgress = 0;
+            if (item.subtasks && item.subtasks.length > 0) {
+                const concluidas = item.subtasks.filter(s => s.done).length;
+                subtaskProgress = (concluidas / item.subtasks.length) * 100;
+            }
+            
+            // Progresso baseado em status
+            let statusProgress = 0;
+            switch(item.status) {
+                case 'Não Iniciado':
+                case 'Pendente':
+                    statusProgress = 0;
+                    break;
+                case 'Em Progresso':
+                case 'Em andamento':
+                    statusProgress = 50;
+                    break;
+                case 'Concluído Parcialmente':
+                case 'Alcançado (Parcialmente)':
+                    statusProgress = 75;
+                    break;
+                case 'Concluído':
+                case 'Alcançado (Sim)':
+                    statusProgress = 100;
+                    break;
+                case 'Cancelado':
+                case 'Não Alcançado':
+                    statusProgress = 0;
+                    break;
+            }
+            
+            // Média ponderada: status tem peso 2, subtasks peso 1
+            const progress = item.subtasks && item.subtasks.length > 0
+                ? (statusProgress * 2 + subtaskProgress) / 3
+                : statusProgress;
+                
+            return Math.round(progress);
+        }
+
+        // Funções para gerenciar categorias
+        function carregarCategorias() {
+            const cats = JSON.parse(localStorage.getItem(CAT_KEY)) || [];
+            const lista = document.getElementById('lista-categorias');
+            if (!lista) return;
+            
+            if (cats.length === 0) {
+                lista.innerHTML = '<p style="color:var(--text-muted)">Nenhuma categoria cadastrada.</p>';
+            } else {
+                lista.innerHTML = cats.map(c => `
+                    <div class="category-chip" style="background:${getCategoryColor(c)}">
+                        <span>${c}</span>
+                        <button onclick="removerCategoria('${c}')" title="Remover categoria">
+                            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                                <path d="M6 6l8 8m-8 0l8-8" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                `).join('');
+            }
+            preencherCategoriaSelect();
+            atualizarFiltros();
+        }
+
+        // Cores predefinidas para categorias
+        const categoryColors = [
+            '#4299E1', // azul
+            '#48BB78', // verde
+            '#ED64A6', // rosa
+            '#ECC94B', // amarelo
+            '#9F7AEA', // roxo
+            '#F56565', // vermelho
+            '#4FD1C5', // teal
+            '#ED8936', // laranja
+            '#667EEA', // indigo
+            '#FC8181'  // coral
+        ];
+
+        function getCategoryColor(category) {
+            if (!category) return categoryColors[0];
+            const cats = JSON.parse(localStorage.getItem(CAT_KEY)) || [];
+            const index = cats.indexOf(category);
+            return categoryColors[index % categoryColors.length];
+        }
+
+        async function removerCategoria(nome) {
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const temOKRs = krs.some(k => k.categoria === nome);
+            
+            if (temOKRs) {
+                const confirma = await confirmModal(
+                    `Esta categoria possui OKRs associados. Ao remover, esses OKRs ficarão sem categoria. Deseja continuar?`
+                );
+                if (!confirma) return;
+            }
+
+            let cats = JSON.parse(localStorage.getItem(CAT_KEY)) || [];
+            cats = cats.filter(c => c !== nome);
+            localStorage.setItem(CAT_KEY, JSON.stringify(cats));
+            
+            // Atualiza OKRs que usavam esta categoria
+            if (temOKRs) {
+                const krsAtualizados = krs.map(k => {
+                    if (k.categoria === nome) {
+                        k.categoria = '';
+                    }
+                    return k;
+                });
+                localStorage.setItem(KR_KEY, JSON.stringify(krsAtualizados));
+            }
+
+            carregarCategorias();
+            exibirKRs();
+            createToast('Categoria removida com sucesso.', 'success');
+        }
+
+        function adicionarCategoria() {
+            const input = document.getElementById('nova-categoria');
+            const nome = input.value.trim().toUpperCase();
+            
+            if (!nome) {
+                createToast('Digite o nome da categoria.', 'error');
+                return;
+            }
+
+            let cats = JSON.parse(localStorage.getItem(CAT_KEY)) || [];
+            if (cats.includes(nome)) {
+                input.value = '';
+                createToast('Categoria já existe.', 'error');
+                return;
+            }
+
+            cats.push(nome);
+            localStorage.setItem(CAT_KEY, JSON.stringify(cats));
+            input.value = '';
+            carregarCategorias();
+            createToast('Categoria adicionada com sucesso.', 'success');
+        }
+
+        function preencherCategoriaSelect() {
+            const select = document.getElementById('categoria-select');
+            if (!select) return;
+
+            const cats = JSON.parse(localStorage.getItem(CAT_KEY)) || [];
+            select.innerHTML = '<option value="">(Sem categoria)</option>' + 
+                cats.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        // Funções para gerenciar sub-OKRs
+        function adicionarSubOKR() {
+            const input = document.getElementById('subokr-input');
+            const texto = input.value.trim();
+            
+            if (!texto) return;
+
+            subOKRsTemp.push({
+                id: Date.now() + Math.random(),
+                text: texto,
+                done: false
+            });
+            
+            input.value = '';
+            renderSubOKRsTemp();
+        }
+
+        function removerSubOKR(id) {
+            subOKRsTemp = subOKRsTemp.filter(s => s.id !== id);
+            renderSubOKRsTemp();
+        }
+
+        function renderSubOKRsTemp() {
+            const ul = document.getElementById('lista-subokrs');
+            if (!ul) return;
+
+            ul.innerHTML = '';
+            subOKRsTemp.forEach(s => {
+                const li = document.createElement('li');
+                li.style.marginBottom = '8px';
+                li.innerHTML = `
+                    ${s.text}
+                    <button onclick="removerSubOKR(${s.id})" style="margin-left:8px;padding:4px 8px;font-size:12px;">
+                        Remover
+                    </button>
+                `;
+                ul.appendChild(li);
+            });
+        }
+
+        // Funções para salvar e exibir OKRs
+        function salvarKR() {
+            const {
+                krTexto, kpiResultado, kpiComo, kpiFrequencia,
+                categoria, deadline, subtasks
+            } = getFormData();
+            
+            const mensagem = document.getElementById('mensagem-kr');
+
+            if (!validarFormulario()) {
+                return;
+            }
+
+            localStorage.setItem(USER_KR_KEY, krTexto);
+            
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            krs = krs.filter(item => item.kr !== krTexto);
+            
+            const novoKr = {
+                id: Date.now(),
+                kr: krTexto,
+                resultado: kpiResultado,
+                como: kpiComo,
+                frequencia: kpiFrequencia,
+                categoria: categoria,
+                deadline: deadline,
+                subtasks: subtasks,
+                data: new Date().toLocaleString('pt-BR'),
+                status: 'Pendente'
+            };
+
+            krs.push(novoKr);
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            
+            subOKRsTemp = [];
+            renderSubOKRsTemp();
+
+            mensagem.textContent = 'Seu OKR e fundamentos foram salvos com sucesso! 🎉';
+            mensagem.className = 'mensagem mensagem-sucesso';
+            
+            carregarAvaliacaoInicial();
+            carregarControleRapido();
+            exibirKRs();
+        }
+
+        function exibirKRs(krsParam) {
+            const listaDiv = document.getElementById('lista-krs');
+            if (!listaDiv) return;
+
+            const krs = krsParam || JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            
+            if (krs.length === 0) {
+                listaDiv.innerHTML = '<p style="grid-column: 1 / -1;">Nenhum OKR submetido ainda.</p>';
+                return;
+            }
+
+            listaDiv.innerHTML = '';
+            krs.forEach(item => {
+                const statusClass = item.status && item.status.includes('Sim') ? 'badge-green' :
+                    item.status && (item.status.includes('Parcialmente') || item.status.includes('Em andamento')) ? 'badge-yellow' :
+                    item.status && item.status.includes('Não') ? 'badge-red' : 'status-badge';
+                const urgencyClass = calcularUrgencia(item.deadline, item.frequencia);
+                
+                
+                const statusTexto = item.status || 'Pendente';
+                
+                const subtasksHtml = item.subtasks && item.subtasks.length ?
+                    `<div class="kpi-detail">
+                        <strong>Sub-OKRs:</strong>
+                        <ul style="margin-top:5px;list-style-position:inside;">
+                            ${item.subtasks.map(s => `<li>${s.text}</li>`).join('')}
+                        </ul>
+                    </div>` : '';
+
+                const card = document.createElement('div');
+                card.id = `okr-card-${item.id}`;
+                card.className = `kr-card ${urgencyClass}`;
+                const subtasksListHtml = (item.subtasks || []).map((s, idx) => `
+                    <li style="margin-bottom:6px;">
+                        <label style="display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" onchange="toggleSubtask('${item.id}', ${idx}, this.checked)" ${s.done ? 'checked' : ''}>
+                            <span style="text-decoration: ${s.done ? 'line-through' : 'none'};">${s.text}</span>
+                        </label>
+                    </li>
+                `).join('');
+
+                card.innerHTML = `
+                    <strong>OKR (A Métrica de Sucesso):</strong>
+                    <p class="kr-text">${item.kr}</p>
+
+                    <div class="kpi-detail">
+                        <strong>Categoria:</strong>
+                        <p>${item.categoria || '—'}</p>
+                    </div>
+
+                    <div class="kpi-detail">
+                        <strong>Data Limite:</strong>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span id="field-deadline-${item.id}">${formatarData(item.deadline)}</span>
+                            <button onclick="enableInlineFieldEdit('${item.id}','deadline')" style="background:transparent;border:none;cursor:pointer;padding:4px;border-radius:4px;color:var(--text-muted);transition:all 0.2s ease;" onmouseover="this.style.color='var(--primary-color)'" onmouseout="this.style.color='var(--text-muted)'">
+                                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                                    <path d="M11 3a1 1 0 112 0v1h3a1 1 0 110 2h-.5l-1 9a2 2 0 01-2 2h-5a2 2 0 01-2-2l-1-9H4a1 1 0 110-2h3V3a1 1 0 011-1h2a1 1 0 011 1v1z" stroke-width="2"/>
+                                </svg>
+                            </button>
+                        </div>
+                        ${item.deadline ? `<small style="color: var(--text-muted);">
+                            ${Math.ceil((new Date(item.deadline) - new Date()) / (1000 * 60 * 60 * 24))} dias restantes
+                        </small>` : ''}
+                    </div>
+
+                    <div class="kpi-detail">
+                        <strong>Frequência de Reavaliação:</strong>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span id="field-frequencia-${item.id}">${item.frequencia ? `A cada ${item.frequencia} dias` : 'Não especificada'}</span>
+                            <button onclick="enableInlineFieldEdit('${item.id}','frequencia')" style="background:transparent;border:none;cursor:pointer;padding:4px;border-radius:4px;color:var(--text-muted);transition:all 0.2s ease;" onmouseover="this.style.color='var(--primary-color)'" onmouseout="this.style.color='var(--text-muted)'">
+                                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" stroke-width="2"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="kpi-detail">
+                        <strong>Resultado Desejado (O porquê):</strong>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div id="field-resultado-${item.id}">${item.resultado}</div>
+                            <button onclick="enableInlineFieldEdit('${item.id}','resultado')" style="background:transparent;border:none;cursor:pointer;padding:4px;border-radius:4px;color:var(--text-muted);transition:all 0.2s ease;" onmouseover="this.style.color='var(--primary-color)'" onmouseout="this.style.color='var(--text-muted)'">
+                                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-8.5 8.5a1 1 0 01-.372.264l-4 1a1 1 0 01-1.219-1.22l1-4a1 1 0 01.264-.372l8.5-8.5z" stroke-width="2"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="kpi-detail">
+                        <strong>Estratégia (O como):</strong>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div id="field-como-${item.id}">${item.como}</div>
+                            <button onclick="enableInlineFieldEdit('${item.id}','como')" style="background:transparent;border:none;cursor:pointer;padding:4px;border-radius:4px;color:var(--text-muted);transition:all 0.2s ease;" onmouseover="this.style.color='var(--primary-color)'" onmouseout="this.style.color='var(--text-muted)'">
+                                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-8.5 8.5a1 1 0 01-.372.264l-4 1a1 1 0 01-1.219-1.22l1-4a1 1 0 01.264-.372l8.5-8.5z" stroke-width="2"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    ${item.subtasks && item.subtasks.length ? `
+                        <div class="kpi-detail">
+                            <strong>Sub-OKRs:</strong>
+                            <ul style="margin-top:5px;list-style-position:inside; padding-left: 16px;">
+                                ${subtasksListHtml}
+                            </ul>
+                        </div>
+                    ` : ''}
+
+                    <p style="margin-top:12px;">Submetido em: ${item.data}</p>
+
+                    <div style="margin-top:12px;">
+                        <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+                            <label style="font-weight:600;">Status:</label>
+                            <select onchange="updateStatusInline('${item.id}', this.value)" style="padding:6px; border-radius:4px;flex:1;">
+                                <option value="Não Iniciado" ${item.status==='Não Iniciado'||item.status==='Pendente'?'selected':''}>Não Iniciado</option>
+                                <option value="Em Progresso" ${item.status==='Em Progresso'||item.status==='Em andamento'?'selected':''}>Em Progresso</option>
+                                <option value="Concluído Parcialmente" ${item.status&&(item.status.includes('Parcialmente')||item.status==='Concluído Parcialmente')?'selected':''}>Concluído Parcialmente</option>
+                                <option value="Concluído" ${item.status==='Concluído'||item.status==='Alcançado (Sim)'?'selected':''}>Concluído</option>
+                                <option value="Cancelado" ${item.status==='Cancelado'||item.status==='Não Alcançado'?'selected':''}>Cancelado</option>
+                            </select>
+                        </div>
+                        <div class="progress-wrapper" style="background:var(--border-color);border-radius:8px;height:6px;overflow:hidden;">
+                            <div class="progress-bar" style="width:${calcularProgresso(item)}%;height:100%;background:var(--success-color);transition:width 0.3s ease;"></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                            <small style="color:var(--text-muted);">Progresso Geral</small>
+                            <small style="color:var(--text-muted);">${calcularProgresso(item)}%</small>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:8px; display:flex; gap:8px;">
+                        <button onclick="editarOKR('${item.id}')" style="background:#ffc107; color:#000;display:inline-flex;align-items:center;gap:4px;">
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-8.5 8.5a1 1 0 01-.372.264l-4 1a1 1 0 01-1.219-1.22l1-4a1 1 0 01.264-.372l8.5-8.5z" stroke-width="2"/>
+                            </svg>
+                            Editar
+                        </button>
+                        <button onclick="removerOKR('${item.id}')" style="background:#dc3545;display:inline-flex;align-items:center;gap:4px;">
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                                <path d="M6 7v9a2 2 0 002 2h4a2 2 0 002-2V7M4 7h12M7 7V4a1 1 0 011-1h4a1 1 0 011 1v3" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            Remover
+                        </button>
+                    </div>
+                `;
+                listaDiv.appendChild(card);
+            });
+        }
+
+        // Toasts e remoção com undo
+        const pendingDeletes = {}; // id -> timeoutId
+
+        function showToast(message, type = 'info', duration = 5000, actionsHtml = '') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.style.position = 'fixed';
+                container.style.top = '20px';
+                container.style.right = '20px';
+                container.style.zIndex = 2000;
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.style.background = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#333';
+            toast.style.color = '#fff';
+            toast.style.padding = '10px 14px';
+            toast.style.borderRadius = '8px';
+            toast.style.marginTop = '8px';
+            toast.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+            toast.innerHTML = `<div style="display:flex; gap:8px; align-items:center;"><div style="flex:1">${message}</div><div>${actionsHtml}</div></div>`;
+
+            container.appendChild(toast);
+
+            const hide = () => { if (toast.parentNode) toast.parentNode.removeChild(toast); };
+            setTimeout(hide, duration);
+            return toast;
+        }
+
+        async function removerOKR(id) {
+            const confirm = await confirmModal('Deseja realmente remover este OKR? Esta ação pode ser desfeita por alguns segundos.');
+            if (!confirm) return;
+
+            // marca para remoção com undo
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const index = krs.findIndex(k => String(k.id) === String(id));
+            if (index === -1) return showToast('OKR não encontrado.', 'error');
+
+            const removed = krs.splice(index,1)[0];
+            // salva temporariamente em memory
+            pendingDeletes[id] = { item: removed, timeout: null };
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            exibirKRs();
+            carregarControleRapido();
+            carregarAvaliacaoInicial();
+
+            const undoHtml = `<button style=\"background:transparent;border:1px solid #fff;color:#fff;padding:4px 8px;border-radius:6px;cursor:pointer;\" onclick=\"undoDelete('${id}')\">Desfazer</button>`;
+            createToast('OKR removido. Você pode desfazer.', 'info', 7000, undoHtml);
+
+            // após tempo, remover definitivamente (aqui já removido do storage, então limpa pending)
+            pendingDeletes[id].timeout = setTimeout(() => {
+                delete pendingDeletes[id];
+            }, 7000);
+        }
+
+        function undoDelete(id) {
+            const record = pendingDeletes[id];
+            if (!record) return showToast('Nada para desfazer.', 'error');
+            clearTimeout(record.timeout);
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            krs.push(record.item);
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            delete pendingDeletes[id];
+            exibirKRs();
+            carregarControleRapido();
+            carregarAvaliacaoInicial();
+            showToast('Remoção desfeita.', 'success', 3000);
+        }
+
+        // Atualiza status inline
+        function updateStatusInline(id, novoStatus) {
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const idx = krs.findIndex(k => String(k.id) === String(id));
+            if (idx === -1) return showToast('OKR não encontrado.', 'error');
+            krs[idx].status = novoStatus;
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            showToast('Status atualizado.', 'success', 2000);
+            if (novoStatus.includes('Sim') || novoStatus.includes('Parcialmente')) mostrarMensagemMotivacional();
+            exibirKRs();
+        }
+
+        // Toggle subtask done
+        function toggleSubtask(okrId, subIdx, done) {
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const idx = krs.findIndex(k => String(k.id) === String(okrId));
+            if (idx === -1) return;
+            if (!krs[idx].subtasks) krs[idx].subtasks = [];
+            if (!krs[idx].subtasks[subIdx]) return;
+            krs[idx].subtasks[subIdx].done = done;
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            exibirKRs();
+        }
+
+        // Edição inline rápida de campos no card
+        function enableInlineFieldEdit(id, field) {
+            const card = document.getElementById(`okr-card-${id}`);
+            if (!card) return;
+
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const item = krs.find(k => String(k.id) === String(id));
+            if (!item) return createToast('OKR não encontrado.', 'error');
+
+            const container = card.querySelector(`#field-${field}-${id}`);
+            if (!container) return;
+
+            // evita criar múltiplos inputs
+            if (card.querySelector(`#editfield-${field}-${id}`)) return;
+
+            let inputHtml = '';
+            if (field === 'deadline') {
+                inputHtml = `<input id="editfield-deadline-${id}" type="date" value="${item.deadline || ''}" style="padding:6px;border-radius:4px;border:1px solid var(--border-color);">`;
+            } else if (field === 'frequencia') {
+                inputHtml = `<input id="editfield-frequencia-${id}" type="number" min="1" max="365" value="${item.frequencia || ''}" style="width:120px;padding:6px;border-radius:4px;border:1px solid var(--border-color);">`;
+            } else if (field === 'resultado') {
+                inputHtml = `<textarea id="editfield-resultado-${id}" style="min-width:220px;min-height:60px;padding:6px;border-radius:4px;border:1px solid var(--border-color);">${item.resultado || ''}</textarea>`;
+            } else if (field === 'como') {
+                inputHtml = `<textarea id="editfield-como-${id}" style="min-width:220px;min-height:60px;padding:6px;border-radius:4px;border:1px solid var(--border-color);">${item.como || ''}</textarea>`;
+            }
+
+            const editorWrapper = document.createElement('div');
+            editorWrapper.id = `editfield-${field}-${id}`;
+            editorWrapper.style.marginLeft = '6px';
+            editorWrapper.innerHTML = `${inputHtml} <button style="margin-left:6px;background:#28a745;" onclick="saveInlineFieldEdit('${id}','${field}')">Salvar</button> <button style="margin-left:6px;background:#6c757d;" onclick="cancelInlineFieldEdit('${id}','${field}')">Cancelar</button>`;
+
+            // replace container content temporarily
+            container.style.display = 'none';
+            container.parentNode.insertBefore(editorWrapper, container.nextSibling);
+        }
+
+        function cancelInlineFieldEdit(id, field) {
+            const card = document.getElementById(`okr-card-${id}`);
+            if (!card) return;
+            const editor = card.querySelector(`#editfield-${field}-${id}`);
+            const container = card.querySelector(`#field-${field}-${id}`);
+            if (editor) editor.remove();
+            if (container) container.style.display = '';
+        }
+
+        function saveInlineFieldEdit(id, field) {
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const idx = krs.findIndex(k => String(k.id) === String(id));
+            if (idx === -1) return createToast('OKR não encontrado.', 'error');
+
+            let newValue = null;
+            if (field === 'deadline') {
+                newValue = document.getElementById(`editfield-deadline-${id}`).value;
+            } else if (field === 'frequencia') {
+                newValue = document.getElementById(`editfield-frequencia-${id}`).value;
+            } else if (field === 'resultado') {
+                newValue = document.getElementById(`editfield-resultado-${id}`).value.trim();
+            } else if (field === 'como') {
+                newValue = document.getElementById(`editfield-como-${id}`).value.trim();
+            }
+
+            // validação simples
+            if ((field === 'frequencia') && (isNaN(parseInt(newValue)) || parseInt(newValue) < 1 || parseInt(newValue) > 365)) {
+                return createToast('Frequência deve ser número entre 1 e 365.', 'error');
+            }
+
+            // guarda estado anterior para undo
+            const previous = JSON.parse(JSON.stringify(krs[idx]));
+            pendingEdits[id] = { previous, timeout: null };
+
+            if (field === 'deadline') krs[idx].deadline = newValue;
+            if (field === 'frequencia') krs[idx].frequencia = newValue;
+            if (field === 'resultado') krs[idx].resultado = newValue;
+            if (field === 'como') krs[idx].como = newValue;
+
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            exibirKRs();
+            carregarControleRapido();
+            carregarAvaliacaoInicial();
+
+            // toast com undo
+            const undoHtml = `<button style=\"background:transparent;border:1px solid #fff;color:#fff;padding:4px 8px;border-radius:6px;cursor:pointer;\" onclick=\"undoEdit('${id}')\">Desfazer</button>`;
+            createToast('Campo atualizado. Você pode desfazer.', 'success', 8000, undoHtml);
+            pendingEdits[id].timeout = setTimeout(() => { delete pendingEdits[id]; }, 8000);
+        }
+
+        // Helpers e edição inline
+        function getCategoryOptions(selected) {
+            const cats = JSON.parse(localStorage.getItem(CAT_KEY)) || [];
+            return ['<option value="">(Sem categoria)</option>']
+                .concat(cats.map(c => `<option value="${c}" ${selected===c? 'selected':''}>${c}</option>`))
+                .join('');
+        }
+
+        function editarOKR(id) {
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const item = krs.find(k => String(k.id) === String(id));
+            if (!item) return showToast('OKR não encontrado para edição.', 'error');
+
+            const card = document.getElementById(`okr-card-${id}`);
+            if (!card) return;
+
+            const subtasksText = (item.subtasks || []).map(s => s.text).join('\n');
+
+            card.innerHTML = `
+                <label style="font-weight:700">OKR</label>
+                <textarea id="edit-okr-${id}" style="width:100%;">${item.kr}</textarea>
+
+                <label style="font-weight:700">Categoria</label>
+                <select id="edit-cat-${id}" style="width:100%;">${getCategoryOptions(item.categoria)}</select>
+
+                <div style="display:flex; gap:10px; margin-top:8px;">
+                    <div style="flex:1;">
+                        <label style="font-weight:700">Prazo</label>
+                        <input type="date" id="edit-deadline-${id}" value="${item.deadline || ''}" style="width:100%;">
+                    </div>
+                    <div style="width:140px;">
+                        <label style="font-weight:700">Frequência (dias)</label>
+                        <input type="number" id="edit-freq-${id}" min="1" max="365" value="${item.frequencia || ''}" style="width:100%;">
+                    </div>
+                </div>
+
+                <label style="font-weight:700; margin-top:8px; display:block;">Resultado Desejado</label>
+                <textarea id="edit-resultado-${id}" style="width:100%;">${item.resultado || ''}</textarea>
+
+                <label style="font-weight:700; margin-top:8px; display:block;">Estratégia (Como)</label>
+                <textarea id="edit-como-${id}" style="width:100%;">${item.como || ''}</textarea>
+
+                <label style="font-weight:700; margin-top:8px; display:block;">Sub-OKRs (uma por linha)</label>
+                <textarea id="edit-subtasks-${id}" style="width:100%; min-height:60px;">${subtasksText}</textarea>
+
+                <div style="margin-top:10px; display:flex; gap:8px;">
+                    <button onclick="salvarEdicao('${id}')" style="background:#28a745;">💾 Salvar</button>
+                    <button onclick="cancelarEdicao('${id}')" style="background:#6c757d;">Cancelar</button>
+                </div>
+            `;
+        }
+
+        function salvarEdicao(id) {
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const index = krs.findIndex(k => String(k.id) === String(id));
+            if (index === -1) return showToast('OKR não encontrado.', 'error');
+
+            // Guarda estado anterior para possível undo
+            const previous = JSON.parse(JSON.stringify(krs[index]));
+            if (pendingEdits[id] && pendingEdits[id].timeout) {
+                clearTimeout(pendingEdits[id].timeout);
+            }
+            pendingEdits[id] = { previous, timeout: null };
+
+            const okrText = document.getElementById(`edit-okr-${id}`).value.trim();
+            const categoria = document.getElementById(`edit-cat-${id}`).value;
+            const deadline = document.getElementById(`edit-deadline-${id}`).value;
+            const frequencia = document.getElementById(`edit-freq-${id}`).value;
+            const resultado = document.getElementById(`edit-resultado-${id}`).value.trim();
+            const como = document.getElementById(`edit-como-${id}`).value.trim();
+            const subtasksRaw = document.getElementById(`edit-subtasks-${id}`).value.trim();
+
+            if (!okrText || !resultado || !como || !frequencia) {
+                return showToast('Preencha OKR, Resultado, Estratégia e Frequência.', 'error');
+            }
+
+            const subtasks = subtasksRaw ? subtasksRaw.split('\n').map(t => ({ id: Date.now() + Math.random(), text: t.trim(), done:false })) : [];
+
+            krs[index].kr = okrText;
+            krs[index].categoria = categoria;
+            krs[index].deadline = deadline;
+            krs[index].frequencia = frequencia;
+            krs[index].resultado = resultado;
+            krs[index].como = como;
+            krs[index].subtasks = subtasks;
+
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            exibirKRs();
+            carregarControleRapido();
+            carregarAvaliacaoInicial();
+
+            // Mostrar toast com Undo para edição
+            const undoHtml = `<button style=\"background:transparent;border:1px solid #fff;color:#fff;padding:4px 8px;border-radius:6px;cursor:pointer;\" onclick=\"undoEdit('${id}')\">Desfazer</button>`;
+            createToast('Edição salva. Você pode desfazer.', 'success', 8000, undoHtml);
+            // limpar pendingEdits após tempo
+            pendingEdits[id].timeout = setTimeout(() => { delete pendingEdits[id]; }, 8000);
+        }
+
+        function cancelarEdicao(id) {
+            exibirKRs();
+        }
+
+        function undoEdit(id) {
+            const record = pendingEdits[id];
+            if (!record) return createToast('Nada para desfazer.', 'error');
+            clearTimeout(record.timeout);
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const idx = krs.findIndex(k => String(k.id) === String(id));
+            if (idx === -1) {
+                // se não existir, re-insere
+                krs.push(record.previous);
+            } else {
+                krs[idx] = record.previous;
+            }
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            delete pendingEdits[id];
+            exibirKRs();
+            carregarControleRapido();
+            carregarAvaliacaoInicial();
+            createToast('Edição desfeita.', 'success', 3000);
+        }
+
+        
+
+        // Funções para avaliação e controle de status
+        // Gerenciamento de competências e avaliações
+        function adicionarCompetencia() {
+            const input = document.getElementById('nova-competencia');
+            const texto = input.value.trim();
+            if (!texto) return;
+
+            const krSubmetido = document.getElementById('kr-submetido');
+            const okrId = krSubmetido.getAttribute('data-id');
+            if (!okrId) return;
+
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const index = krs.findIndex(item => String(item.id) === okrId);
+            if (index === -1) return;
+
+            if (!krs[index].competencias) {
+                krs[index].competencias = [];
+            }
+
+            // Evita duplicatas
+            if (!krs[index].competencias.includes(texto)) {
+                krs[index].competencias.push(texto);
+                localStorage.setItem(KR_KEY, JSON.stringify(krs));
+                input.value = '';
+                exibirCompetencias(krs[index].competencias);
+                createToast('Competência adicionada com sucesso.', 'success');
+            } else {
+                createToast('Esta competência já foi adicionada.', 'error');
+            }
+        }
+
+        function removerCompetencia(competencia) {
+            const krSubmetido = document.getElementById('kr-submetido');
+            const okrId = krSubmetido.getAttribute('data-id');
+            if (!okrId) return;
+
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const index = krs.findIndex(item => String(item.id) === okrId);
+            if (index === -1) return;
+
+            krs[index].competencias = (krs[index].competencias || []).filter(c => c !== competencia);
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            exibirCompetencias(krs[index].competencias);
+            createToast('Competência removida.', 'success');
+        }
+
+        function exibirCompetencias(competencias = []) {
+            const lista = document.getElementById('competencias-list');
+            if (!lista) return;
+
+            lista.innerHTML = competencias.map(c => `
+                <div class="category-chip" style="background:var(--primary-color)">
+                    <span>${c}</span>
+                    <button onclick="removerCompetencia('${c}')" title="Remover competência">
+                        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                            <path d="M6 6l8 8m-8 0l8-8" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function salvarAvaliacao() {
+            const krSubmetido = document.getElementById('kr-submetido');
+            const okrId = krSubmetido.getAttribute('data-id');
+            const feedback = document.getElementById('feedback').value.trim();
+            const proximosPassos = document.getElementById('proximos-passos').value.trim();
+            const mensagemAvaliacao = document.getElementById('mensagem-avaliacao');
+            
+            if (!okrId) {
+                createToast('Erro: Selecione um OKR para avaliar.', 'error');
+                return;
+            }
+
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const index = krs.findIndex(item => String(item.id) === okrId);
+            
+            if (index > -1) {
+                // Atualiza ou cria o objeto de avaliação
+                krs[index].avaliacao = {
+                    feedback,
+                    proximosPassos,
+                    dataAvaliacao: new Date().toISOString()
+                };
+                
+                localStorage.setItem(KR_KEY, JSON.stringify(krs));
+                createToast('Avaliação salva com sucesso!', 'success');
+                
+                if (krs[index].status === 'Concluído' || krs[index].status === 'Concluído Parcialmente') {
+                    mostrarMensagemMotivacional();
+                }
+            }
+
+            carregarControleRapido();
+            exibirKRs();
+        }
+
+        function selecionarOKRParaAvaliacao(okrId) {
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const krData = krs.find(item => String(item.id) === okrId);
+            const krSubmetido = document.getElementById('kr-submetido');
+            const feedback = document.getElementById('feedback');
+            const proximosPassos = document.getElementById('proximos-passos');
+
+            if (krData) {
+                krSubmetido.textContent = krData.kr;
+                krSubmetido.setAttribute('data-id', okrId);
+                
+                // Carrega avaliação existente
+                if (krData.avaliacao) {
+                    feedback.value = krData.avaliacao.feedback || '';
+                    proximosPassos.value = krData.avaliacao.proximosPassos || '';
+                } else {
+                    feedback.value = '';
+                    proximosPassos.value = '';
+                }
+
+                // Carrega competências
+                exibirCompetencias(krData.competencias || []);
+            } else {
+                krSubmetido.textContent = 'Nenhum OKR selecionado';
+                krSubmetido.removeAttribute('data-id');
+                feedback.value = '';
+                proximosPassos.value = '';
+                exibirCompetencias([]);
+            }
+        }
+
+        function votarKR(status) {
+            const krSubmetido = document.getElementById('kr-submetido');
+            const okrId = krSubmetido.getAttribute('data-id');
+            
+            if (!okrId) {
+                createToast('Erro: Selecione um OKR para avaliar.', 'error');
+                return;
+            }
+
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const index = krs.findIndex(item => String(item.id) === okrId);
+            
+            if (index > -1) {
+                krs[index].status = status;
+                localStorage.setItem(KR_KEY, JSON.stringify(krs));
+
+                if (status === 'Concluído' || status === 'Concluído Parcialmente') {
+                    mostrarMensagemMotivacional();
+                }
+
+                createToast(`Status atualizado: ${status}`, 'success');
+            }
+
+            carregarControleRapido();
+            exibirKRs();
+        }
+
+        function carregarControleRapido() {
+            let painel = document.getElementById('painel-controle-rapido');
+            if (!painel) {
+                painel = document.createElement('div');
+                painel.className = 'container';
+                painel.id = 'painel-controle-rapido';
+                
+                painel.innerHTML = `
+                    <h2>Controle Rápido de Status</h2>
+                    <p>Selecione um OKR abaixo para alterar rapidamente seu status (útil para professor/admin).</p>
+                    <select id="seletor-okr-controle"></select>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="badge-green" onclick="alterarStatusSelecionado('Alcançado (Sim)')">
+                            ✅ Alcançado
+                        </button>
+                        <button class="badge-yellow" onclick="alterarStatusSelecionado('Em andamento')">
+                            🔄 Em andamento
+                        </button>
+                        <button class="badge-yellow" onclick="alterarStatusSelecionado('Alcançado (Parcialmente)')">
+                            🟡 Parcial
+                        </button>
+                        <button class="badge-red" onclick="alterarStatusSelecionado('Não Alcançado')">
+                            ❌ Não
+                        </button>
+                    </div>
+                    <p id="mensagem-controle" class="mensagem" style="margin-top:10px;"></p>
+                `;
+
+                const professorSection = document.getElementById('secao-professor');
+                professorSection.parentNode.insertBefore(
+                    painel,
+                    document.getElementById('avaliacao-final-container')
+                );
+            }
+
+            const select = document.getElementById('seletor-okr-controle');
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+
+            if (!select) return;
+            
+            if (krs.length === 0) {
+                select.innerHTML = '<option value="">(Nenhum OKR)</option>';
+                return;
+            }
+
+            select.innerHTML = krs.map(k =>
+                `<option value="${k.id}">
+                    ${k.kr}${k.categoria ? ' — ' + k.categoria : ''}
+                </option>`
+            ).join('');
+        }
+
+        function alterarStatusSelecionado(novoStatus) {
+            const select = document.getElementById('seletor-okr-controle');
+            const msg = document.getElementById('mensagem-controle');
+
+            if (!select || !select.value) {
+                msg.textContent = 'Selecione um OKR antes.';
+                msg.className = 'mensagem mensagem-erro';
+                return;
+            }
+
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const index = krs.findIndex(k => String(k.id) === String(select.value));
+
+            if (index === -1) {
+                msg.textContent = 'OKR não encontrado.';
+                msg.className = 'mensagem mensagem-erro';
+                return;
+            }
+
+            krs[index].status = novoStatus;
+            localStorage.setItem(KR_KEY, JSON.stringify(krs));
+            
+            msg.textContent = `Status atualizado: ${novoStatus}`;
+            msg.className = 'mensagem mensagem-sucesso';
+
+            exibirKRs();
+            carregarControleRapido();
+        }
+
+        function selecionarOKRParaAvaliacao(okrId) {
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const krData = krs.find(item => String(item.id) === okrId);
+            const krSubmetido = document.getElementById('kr-submetido');
+
+            if (krData) {
+                krSubmetido.textContent = krData.kr;
+                krSubmetido.setAttribute('data-id', okrId);
+            } else {
+                krSubmetido.textContent = 'Nenhum OKR selecionado';
+                krSubmetido.removeAttribute('data-id');
+            }
+        }
+
+        function carregarAvaliacaoInicial() {
+            const avaliacaoContainer = document.getElementById('avaliacao-final-container');
+            const okrSelector = document.getElementById('okr-selector');
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            
+            if (krs.length === 0) {
+                avaliacaoContainer.style.display = 'none';
+                return;
+            }
+
+            // Preenche o seletor de OKRs
+            okrSelector.innerHTML = '<option value="">Escolha um OKR...</option>' +
+                krs.map(kr => `
+                    <option value="${kr.id}">
+                        ${kr.kr}${kr.categoria ? ` (${kr.categoria})` : ''}
+                    </option>
+                `).join('');
+
+            avaliacaoContainer.style.display = 'block';
+        }
+
+        // Função auxiliar para limpar dados de teste
+        function limparDadosTeste() {
+            if (confirm('Tem certeza que deseja limpar todos os dados?')) {
+                localStorage.removeItem(CAT_KEY);
+                localStorage.removeItem(KR_KEY);
+                localStorage.removeItem(USER_KR_KEY);
+                alert('LocalStorage limpo (categorias, OKRs e KR pessoal). A página será recarregada.');
+                location.reload();
+            }
+        }
+
+        // Funções de filtro e ordenação
+        function atualizarFiltros() {
+            const cats = JSON.parse(localStorage.getItem(CAT_KEY)) || [];
+            const selectCat = document.getElementById('filtro-categoria');
+            if (!selectCat) return;
+
+            selectCat.innerHTML = '<option value="">Todas</option>' +
+                cats.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        function filtrarOKRs() {
+            const busca = document.getElementById('busca-okr').value.toLowerCase();
+            const categoria = document.getElementById('filtro-categoria').value;
+            const status = document.getElementById('filtro-status').value;
+            const ordem = document.getElementById('ordem-okrs').value;
+            
+            let krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            
+            // Aplica filtros
+            krs = krs.filter(k => {
+                const matchBusca = !busca || 
+                    k.kr.toLowerCase().includes(busca) ||
+                    k.resultado?.toLowerCase().includes(busca) ||
+                    k.como?.toLowerCase().includes(busca) ||
+                    k.subtasks?.some(s => s.text.toLowerCase().includes(busca));
+                
+                const matchCategoria = !categoria || k.categoria === categoria;
+                const matchStatus = !status || k.status === status ||
+                    (status === 'Não Iniciado' && (k.status === 'Pendente' || !k.status)) ||
+                    (status === 'Em Progresso' && k.status === 'Em andamento') ||
+                    (status === 'Concluído' && k.status === 'Alcançado (Sim)') ||
+                    (status === 'Cancelado' && k.status === 'Não Alcançado');
+                
+                return matchBusca && matchCategoria && matchStatus;
+            });
+            
+            // Aplica ordenação
+            krs.sort((a, b) => {
+                switch(ordem) {
+                    case 'data-desc':
+                        return new Date(b.data) - new Date(a.data);
+                    case 'data-asc':
+                        return new Date(a.data) - new Date(b.data);
+                    case 'deadline-asc':
+                        if (!a.deadline) return 1;
+                        if (!b.deadline) return -1;
+                        return new Date(a.deadline) - new Date(b.deadline);
+                    case 'deadline-desc':
+                        if (!a.deadline) return 1;
+                        if (!b.deadline) return -1;
+                        return new Date(b.deadline) - new Date(a.deadline);
+                    case 'progresso-desc':
+                        return calcularProgresso(b) - calcularProgresso(a);
+                    case 'progresso-asc':
+                        return calcularProgresso(a) - calcularProgresso(b);
+                    default:
+                        return 0;
+                }
+            });
+            
+            // Atualiza a visualização
+            const listaDiv = document.getElementById('lista-krs');
+            if (!listaDiv) return;
+
+            if (krs.length === 0) {
+                listaDiv.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:20px;">Nenhum OKR encontrado com os filtros selecionados.</p>';
+                return;
+            }
+
+            exibirKRs(krs); // Passa os OKRs já filtrados
+        }
+
+        // Inicialização do tema
+        function initTheme() {
+            const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
+            document.body.setAttribute('data-theme', savedTheme);
+            document.getElementById('theme-toggle').textContent = savedTheme === 'dark' ? '🌙' : '🌞';
+        }
+
+        // Validações
+        function validarFormulario() {
+            const kr = document.getElementById('kr-input').value.trim();
+            const resultado = document.getElementById('kpi-resultado').value.trim();
+            const como = document.getElementById('kpi-como').value.trim();
+            const frequencia = document.getElementById('kpi-frequencia').value.trim();
+            const deadline = document.getElementById('kr-deadline').value;
+            
+            if (!kr || !resultado || !como || !frequencia) {
+                createToast('Preencha todos os campos obrigatórios.', 'error');
+                return false;
+            }
+            
+            const freq = parseInt(frequencia);
+            if (isNaN(freq) || freq < 1 || freq > 365) {
+                createToast('A frequência deve ser um número entre 1 e 365 dias.', 'error');
+                return false;
+            }
+            
+            if (deadline) {
+                const dataLimite = new Date(deadline);
+                const hoje = new Date();
+                hoje.setHours(0, 0, 0, 0);
+                if (dataLimite < hoje) {
+                    createToast('A data limite não pode ser no passado.', 'error');
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+
+        // Timer Pomodoro
+        let pomodoroInterval;
+        let timeLeft;
+        let isTimerRunning = false;
+        let workTime = localStorage.getItem('pomodoro_work_time') ? parseInt(localStorage.getItem('pomodoro_work_time')) : 25 * 60;
+        let breakTime = localStorage.getItem('pomodoro_break_time') ? parseInt(localStorage.getItem('pomodoro_break_time')) : 5 * 60;
+
+        // Carregar configurações salvas
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('work-minutes')) {
+                document.getElementById('work-minutes').value = Math.floor(workTime / 60);
+            }
+            if (document.getElementById('break-minutes')) {
+                document.getElementById('break-minutes').value = Math.floor(breakTime / 60);
+            }
+            resetPomodoro();
+        });
+
+        function togglePomodoro() {
+            const container = document.getElementById('pomodoro-container');
+            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+            if (container.style.display === 'none') {
+                pausePomodoro();
+            }
+        }
+
+        function updatePomodoroSettings() {
+            const workMinutes = document.getElementById('work-minutes').value;
+            const breakMinutes = document.getElementById('break-minutes').value;
+            
+            if (workMinutes < 1 || breakMinutes < 1) {
+                createToast('Os valores devem ser maiores que 0', 'error');
+                return;
+            }
+
+            workTime = workMinutes * 60;
+            breakTime = breakMinutes * 60;
+            
+            localStorage.setItem('pomodoro_work_time', workTime);
+            localStorage.setItem('pomodoro_break_time', breakTime);
+            
+            resetPomodoro();
+            createToast('Configurações atualizadas!', 'success');
+        }
+
+        function startPomodoro() {
+            if (isTimerRunning) return;
+            isTimerRunning = true;
+            
+            document.getElementById('pomodoro-start').disabled = true;
+            document.getElementById('pomodoro-pause').disabled = false;
+            
+            if (!timeLeft) {
+                timeLeft = workTime;
+            }
+            
+            pomodoroInterval = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+                
+                if (timeLeft <= 0) {
+                    completePomodoroSession();
+                }
+            }, 1000);
+        }
+
+        function pausePomodoro() {
+            clearInterval(pomodoroInterval);
+            isTimerRunning = false;
+            document.getElementById('pomodoro-start').disabled = false;
+            document.getElementById('pomodoro-pause').disabled = true;
+        }
+
+        function resetPomodoro() {
+            clearInterval(pomodoroInterval);
+            isTimerRunning = false;
+            timeLeft = workTime;
+            updateTimerDisplay();
+            if (document.getElementById('pomodoro-start')) {
+                document.getElementById('pomodoro-start').disabled = false;
+            }
+            if (document.getElementById('pomodoro-pause')) {
+                document.getElementById('pomodoro-pause').disabled = true;
+            }
+        }
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            document.getElementById('timer-minutes').textContent = minutes.toString().padStart(2, '0');
+            document.getElementById('timer-seconds').textContent = seconds.toString().padStart(2, '0');
+        }
+
+        function completePomodoroSession() {
+            clearInterval(pomodoroInterval);
+            isTimerRunning = false;
+            new Notification('Pomodoro Completo!', {
+                body: 'Hora de uma pausa!',
+                icon: '/favicon.ico'
+            });
+            checkAchievement('pomodoro_master');
+        }
+
+        function setTimerMode(mode) {
+            timeLeft = mode === 'work' ? workTime : breakTime;
+            updateTimerDisplay();
+            
+            document.querySelectorAll('.timer-mode button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // Sistema de Conquistas
+        const customAchievements = JSON.parse(localStorage.getItem('custom_achievements')) || {};
+        
+        function addCustomAchievement(okrId) {
+            const achievementPanel = document.createElement('div');
+            achievementPanel.className = 'achievement-panel';
+            achievementPanel.innerHTML = `
+                <div class="achievement-form">
+                    <h3>Definir Conquista</h3>
+                    <p class="achievement-hint">Defina uma conquista mensurável relacionada a este OKR</p>
+                    <div class="achievement-inputs">
+                        <input type="text" id="achievement-title" placeholder="Título (ex: Completei 3 tarefas)" maxlength="50">
+                        <div class="emoji-picker">
+                            <select id="achievement-emoji">
+                                <option value="🎯">🎯 Meta</option>
+                                <option value="⭐">⭐ Estrela</option>
+                                <option value="🏆">🏆 Troféu</option>
+                                <option value="📈">📈 Progresso</option>
+                                <option value="✨">✨ Brilho</option>
+                                <option value="🎉">🎉 Celebração</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="achievement-buttons">
+                        <button onclick="mereco('${okrId}')" class="btn-mereco">Mereço</button>
+                        <button onclick="naoMereco()" class="btn-nao-mereco">Não Mereço</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(achievementPanel);
+        }
+
+        function mereco(okrId) {
+            const title = document.getElementById('achievement-title').value.trim();
+            const emoji = document.getElementById('achievement-emoji').value;
+            
+            if (!title) {
+                createToast('Digite um título para a conquista', 'error');
+                return;
+            }
+
+            if (title.length > 50) {
+                createToast('O título deve ter no máximo 50 caracteres', 'error');
+                return;
+            }
+
+            const achievement = {
+                emoji,
+                title,
+                description: title,
+                date: new Date().toISOString(),
+                okrId
+            };
+
+            customAchievements[Date.now()] = achievement;
+            localStorage.setItem('custom_achievements', JSON.stringify(customAchievements));
+            
+            document.querySelector('.achievement-panel').remove();
+            showAchievementUnlocked(achievement);
+            updateBadgesCount();
+        }
+
+        function naoMereco() {
+            document.querySelector('.achievement-panel').remove();
+            createToast('Continue se esforçando!', 'info');
+        }
+
+        function checkAchievement(achievementId) {
+            const userAchievements = JSON.parse(localStorage.getItem('okr_achievements')) || [];
+            
+            if (!userAchievements.includes(achievementId)) {
+                userAchievements.push(achievementId);
+                localStorage.setItem('okr_achievements', JSON.stringify(userAchievements));
+                
+                showAchievementUnlocked(achievementId);
+                updateBadgesCount();
+            }
+        }
+
+        function showAchievementUnlocked(achievementId) {
+            const div = document.createElement('div');
+            div.className = 'achievement-unlocked';
+
+            if (typeof achievementId === 'string') {
+                const achievement = achievements[achievementId];
+                if (achievement) {
+                    div.innerHTML = `
+                        ${achievement.emoji} Nova Conquista Desbloqueada!<br>
+                        <strong>${achievement.title}</strong>
+                    `;
+                }
+            } else if (typeof achievementId === 'object') {
+                div.innerHTML = `
+                    ${achievementId.emoji} Nova Conquista Desbloqueada!<br>
+                    <strong>${achievementId.title}</strong>
+                `;
+            }
+            
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 3000);
+        }
+
+        function updateBadgesCount() {
+            const userAchievements = JSON.parse(localStorage.getItem('okr_achievements')) || [];
+            const customAchievements = Object.keys(JSON.parse(localStorage.getItem('custom_achievements')) || {});
+            document.getElementById('badges-count').textContent = userAchievements.length + customAchievements.length;
+        }
+
+        function showAchievements() {
+            const userAchievements = JSON.parse(localStorage.getItem('okr_achievements')) || [];
+            const container = document.getElementById('achievements-list');
+            
+            container.innerHTML = Object.entries(achievements).map(([id, ach]) => `
+                <div class="achievement-card ${userAchievements.includes(id) ? '' : 'locked'}">
+                    <div class="emoji">${ach.emoji}</div>
+                    <div class="title">${ach.title}</div>
+                    <div class="description">${ach.description}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('achievements-modal').classList.add('active');
+        }
+
+        // Sincronização com Google Calendar
+        async function sincronizarCalendar() {
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const calendarEvents = krs.map(kr => ({
+                summary: kr.kr,
+                description: `${kr.resultado}\n\nEstratégia: ${kr.como}`,
+                start: { date: kr.deadline },
+                end: { date: kr.deadline }
+            }));
+
+            try {
+                // Aqui você adicionaria a integração real com a API do Google Calendar
+                createToast('Função de sincronização em desenvolvimento...', 'info');
+                checkAchievement('sync_master');
+            } catch (error) {
+                createToast('Erro ao sincronizar com Google Calendar', 'error');
+            }
+        }
+
+        // Compartilhamento
+        function compartilharOKR() {
+            const krSubmetido = document.getElementById('kr-submetido');
+            const okrId = krSubmetido.getAttribute('data-id');
+            
+            if (!okrId) {
+                createToast('Selecione um OKR para compartilhar.', 'error');
+                return;
+            }
+
+            const krs = JSON.parse(localStorage.getItem(KR_KEY)) || [];
+            const okr = krs.find(k => String(k.id) === okrId);
+            
+            if (!okr) {
+                createToast('OKR não encontrado.', 'error');
+                return;
+            }
+
+            // Criar URL compartilhável
+            const shareData = {
+                title: 'Compartilhar OKR',
+                text: `Meu OKR: ${okr.kr}\nResultado Desejado: ${okr.resultado}`,
+                url: window.location.href
+            };
+
+            if (navigator.share) {
+                navigator.share(shareData)
+                    .then(() => checkAchievement('share_master'))
+                    .catch(err => createToast('Erro ao compartilhar', 'error'));
+            } else {
+                // Fallback para copiar para clipboard
+                navigator.clipboard.writeText(shareData.text)
+                    .then(() => {
+                        createToast('Texto copiado para área de transferência!', 'success');
+                        checkAchievement('share_master');
+                    })
+                    .catch(() => createToast('Erro ao copiar texto', 'error'));
+            }
+        }
+
+        // Inicialização
+        window.onload = function() {
+            initTheme();
+            carregarCategorias();
+            carregarAvaliacaoInicial();
+            carregarControleRapido();
+            exibirKRs();
+            updateBadgesCount();
+
+            // Solicita permissão para notificações (para Pomodoro)
+            if (Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        };
+    </script>
+</body>
+</html>
